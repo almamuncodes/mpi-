@@ -210,24 +210,52 @@ export default function ProfileView() {
 
   // Cloudinary image upload function
   const uploadImageToCloudinary = async (file) => {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "kkvshrff";
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "easymess_preset";
+
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "easymess_preset");
+    formData.append("upload_preset", uploadPreset);
 
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "kkvshrff"}/image/upload`,
-      {
-        method: "POST",
-        body: formData,
+    try {
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await res.json();
+      if (res.ok && data.secure_url) {
+        return data.secure_url;
       }
-    );
-
-    const data = await res.json();
-    if (!data.secure_url) {
-      throw new Error("Image upload failed");
+      console.warn(`[Cloudinary Warning] Upload to ${cloudName} failed: ${data?.error?.message}`);
+    } catch (err) {
+      console.warn("[Cloudinary Warning] Primary fetch error:", err);
     }
 
-    return data.secure_url;
+    // Fallback upload attempt if custom cloud preset is not whitelisted for unsigned uploads
+    if (cloudName !== "kkvshrff") {
+      const fallbackData = new FormData();
+      fallbackData.append("file", file);
+      fallbackData.append("upload_preset", "easymess_preset");
+
+      const resFb = await fetch(
+        "https://api.cloudinary.com/v1_1/kkvshrff/image/upload",
+        {
+          method: "POST",
+          body: fallbackData,
+        }
+      );
+      const dataFb = await resFb.json();
+      if (resFb.ok && dataFb.secure_url) {
+        console.log("[Cloudinary] Fallback upload succeeded!");
+        return dataFb.secure_url;
+      }
+    }
+
+    throw new Error("Upload preset must be whitelisted for unsigned uploads in your Cloudinary Dashboard.");
   };
 
   const handleImageChange = (e) => {
@@ -286,7 +314,7 @@ export default function ProfileView() {
       setIsEditing(false);
     } catch (err) {
       console.error("Update profile failed:", err);
-      setSuccessMsg(lang === "en" ? "Failed to update profile. Please try again." : "প্রোফাইল আপডেট করতে ব্যর্থ হয়েছে।");
+      setSuccessMsg(err.message || (lang === "en" ? "Failed to update profile. Please try again." : "প্রোফাইল আপডেট করতে ব্যর্থ হয়েছে।"));
     } finally {
       setSavingProfile(false);
       setTimeout(() => setSuccessMsg(""), 3000);

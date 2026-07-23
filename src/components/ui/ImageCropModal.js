@@ -156,7 +156,7 @@ export default function ImageCropModal({ imageSrc, onApply, onCancel, cropShape 
     const ctx = exportCanvas.getContext("2d");
 
     if (isOriginalSize) {
-      const maxDim = 800;
+      const maxDim = 500;
       const aspect = imgElement.width / imgElement.height;
       let exportW, exportH;
       if (imgElement.width >= imgElement.height) {
@@ -173,16 +173,16 @@ export default function ImageCropModal({ imageSrc, onApply, onCancel, cropShape 
       ctx.filter = activeFilterObj ? activeFilterObj.filter : "none";
       ctx.drawImage(imgElement, 0, 0, exportW, exportH);
     } else {
-      exportCanvas.width = 400;
-      exportCanvas.height = 400;
+      exportCanvas.width = 300;
+      exportCanvas.height = 300;
 
-      const size = 400;
+      const size = 300;
       const scale = Math.max(size / imgElement.width, size / imgElement.height) * zoom;
       const drawW = imgElement.width * scale;
       const drawH = imgElement.height * scale;
 
-      const x = (size - drawW) / 2 + (offset.x * (400 / 300));
-      const y = (size - drawH) / 2 + (offset.y * (400 / 300));
+      const x = (size - drawW) / 2 + (offset.x * (300 / 300));
+      const y = (size - drawH) / 2 + (offset.y * (300 / 300));
 
       const activeFilterObj = FILTERS.find((f) => f.id === selectedFilter);
       ctx.filter = activeFilterObj ? activeFilterObj.filter : "none";
@@ -190,16 +190,29 @@ export default function ImageCropModal({ imageSrc, onApply, onCancel, cropShape 
       ctx.drawImage(imgElement, x, y, drawW, drawH);
     }
 
-    exportCanvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        const file = new File([blob], "profile-image.jpg", { type: "image/jpeg" });
-        const previewUrl = URL.createObjectURL(blob);
-        onApply({ file, previewUrl });
-      },
-      "image/jpeg",
-      0.85
-    );
+    // Dynamic compression algorithm targeting 30-40 KB
+    const compressToTargetSize = (q = 0.72) => {
+      exportCanvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+          const sizeKb = blob.size / 1024;
+          
+          // If size exceeds 40KB and quality can be reduced further, step down quality
+          if (sizeKb > 40 && q > 0.35) {
+            compressToTargetSize(Math.max(0.35, q - 0.08));
+          } else {
+            console.log(`[Image Optimizer] Compressed output image: ${sizeKb.toFixed(1)} KB (Quality: ${(q * 100).toFixed(0)}%)`);
+            const file = new File([blob], "profile-image.jpg", { type: "image/jpeg" });
+            const previewUrl = URL.createObjectURL(blob);
+            onApply({ file, previewUrl });
+          }
+        },
+        "image/jpeg",
+        q
+      );
+    };
+
+    compressToTargetSize(0.72);
   };
 
   return (
